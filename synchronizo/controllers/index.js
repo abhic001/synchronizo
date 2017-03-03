@@ -3,6 +3,7 @@ var router = express.Router();
 var app = require('../server').app;
 
 router.use('/room', require('./music_room'))
+router.use('/api', require('./api'))
 
 
 router.get('/', function(req, res) {
@@ -12,11 +13,8 @@ router.get('/', function(req, res) {
         rooms.push(app.locals.rooms[room]);
     }
 
+    console.log(req.user);
     res.render('public/index.html', {rooms: rooms});
-});
-
-router.get('/login', function(req,res) {
-    res.render('public/login.html');
 });
 
 module.exports = router;

@@ -4,7 +4,7 @@ var users = {};
 var songs = {};
 
 socket.on('connect', function(data) {
-    socket.emit('join', {'room': ROOM_NAME});
+    socket.emit('join', {room: ROOM_NAME, authToken: AUTH_TOKEN});
 });
 
 socket.on('newUserJoin', function(data) {
@@ -28,8 +28,45 @@ socket.on('songUpdate', function(data) {
     onSongUpdate(data);
 });
 
+socket.on('changeSong', function(id) {
+    console.log("song changing to " + id);
+
+    onSongChange(id);
+});
+
+var RETRIEVING_ALREADY = false;
+function retrieveArtistInfo(artist) {
+    if (RETRIEVING_ALREADY) {
+        return;
+    }
+
+    RETRIEVING_ALREADY = true;
+
+    $("#artist-bio").fadeOut(function() {
+        $("#artist-loader").fadeIn(function() {
+            $.get("/api/artist_info.json", { artist: artist},
+            function(data) {
+                if (data.error) {
+                    $("#artist-info-name").text(artist);
+                    $("#artist-bio").text("Failed to retrieve information");
+                    return;
+                }
+
+                $("#artist-bio").html(data.bio);
+                $("#artist-info-name").text(data.artist);
+                $("#artist-image").attr("src", data.image);
+            }, "json").always(function() {
+                $("#artist-loader").fadeOut(function() {
+                    $("#artist-bio").fadeIn();
+                });
+                RETRIEVING_ALREADY = false;
+            });
+        });
+    });
+}
+
 function onNewUserJoin(user) {
-    var user = new User(user.id, user.username);
+    var user = new User(user.id, user.username, user.avatar);
 
     if (user.id in users) {
         // update the exixting user
@@ -47,9 +84,10 @@ function onUserQuit(user) {
     delete users[user.id];
 }
 
-function User(id, username) {
+function User(id, username, avatar) {
     this.id = id;
     this.username = username;
+    this.avatar = avatar;
 
     this.renderedBox = $("");
 }
@@ -61,10 +99,24 @@ User.prototype.setRenderedBox = function(renderedBox) {
 User.prototype.renderUserBox = function () {
     var html = $($("#userDisplayTemplate").html());
     //set user avatar to whatever
-    //html.find('.user-avatar').
+    html.find('.user-avatar').attr('src', this.avatar);
     html.find('.user-name').text(this.username);
     return html;
 };
+
+function changeSong(id) {
+    socket.emit('clientChangeSong', id);
+}
+
+function onSongChange(id) {
+    var song = songs[id];
+
+    $(".song.active").removeClass("active");
+    song.rendered.addClass("active");
+
+    wavesurfer.load(ROOM_NAME + '/song/' + id);
+    retrieveArtistInfo(song.artist);
+}
 
 function onSongUpdate(song) {
     if (song.id in songs) {
@@ -134,10 +186,20 @@ Song.prototype.renderSongBox = function() {
     html = html.replace("{album-art}", this.albumArt);
     html = $(html);
 
+    var _this = this;
+
     html.find('.artist').attr('title', this.artist);
-    html.find('.artist a').text(this.artist);
+    html.find('.artist a').text(this.artist).click(function(event) {
+        event.preventDefault();
+        retrieveArtistInfo(_this.artist);
+    });
     html.find('.album').text(this.album).attr('title', this.album);
     html.find('.title').text(this.title).attr('title', this.title);
+
+    html.find('.album-art-link').click(function(event) {
+        event.preventDefault();
+        changeSong(_this.id);
+    });
 
     if (this.uploading) {
         this.setProgress(html, this.uploadProgress);
@@ -164,7 +226,7 @@ $( document ).ready(function() {
 
     function onFileSelect(file) {
         $("#upload-button").addClass("disabled");
-        var blob = file.slice(0, 1023);
+        var blob = file.slice(0, 2048);
 
         socket.emit('preUploadMeta', {filename: file.name, metadata: blob});
 
