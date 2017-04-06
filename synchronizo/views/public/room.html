@@ -27,6 +27,21 @@ var wavesurfer = WaveSurfer.create({
 wavesurfer.on('ready', function () {
     wavesurfer.play();
 });
+// if we just seeked based on the server's request to seek, do not
+// react to the seek listener, otherwise we create an infinite loop
+// where we think we seeked, so we update the server, which updates us
+// which causes us to think we seeked and so on.....
+
+wavesurfer.seekDisabled = false;
+wavesurfer.on('seek', function(progress) {
+    if (wavesurfer.seekDisabled) {
+        wavesurfer.seekDisabled = false;
+        return;
+    }
+
+    console.log("seeked locally to " + progress);
+    socket.emit('seekSong', {progress: progress});
+});
 </script>
 {% endblock %}
 
@@ -60,10 +75,6 @@ wavesurfer.on('ready', function () {
 </script>
 
     <div class="container-fluid">
-        <div class="page-header text-center">
-            <h1><small>Currently listening in the </small> {{ room.name }} <small>room</small></h1>
-        </div>
-
         <div id="error" style="display: none" class="row">
             <div class="col-md-4 col-md-offset-4">
                 <div class="text-center alert alert-danger">
@@ -75,16 +86,16 @@ wavesurfer.on('ready', function () {
         <div class="row">
             <div class="col-md-4 text-center">
                 <div class="btn-group" role="group" aria-label="...">
-                    <button type="button" class="btn btn-primary btn-large" aria-label="Fast-Backward">
+                    <button onclick="socket.emit('previousSong')" type="button" class="btn btn-primary btn-large" aria-label="Fast-Backward">
                         <span class="glyphicon glyphicon-fast-backward" aria-hidden="true"></span>
                     </button>
-                    <button onclick="wavesurfer.play()" type="button" class="btn btn-primary btn-large" aria-label="Play">
+                    <button onclick="socket.emit('playSong')" type="button" class="btn btn-primary btn-large" aria-label="Play">
                         <span class="glyphicon glyphicon-play" aria-hidden="true"></span>
                     </button>
-                    <button onclick="wavesurfer.pause()" type="button" class="btn btn-primary btn-large" aria-label="Pause">
+                    <button onclick="socket.emit('pauseSong')" type="button" class="btn btn-primary btn-large" aria-label="Pause">
                         <span class="glyphicon glyphicon-pause" aria-hidden="true"></span>
                     </button>
-                    <button type="button" class="btn btn-primary btn-large" aria-label="Fast-Backward">
+                    <button onclick="socket.emit('nextSong')" type="button" class="btn btn-primary btn-large" aria-label="Fast-Backward">
                         <span class="glyphicon glyphicon-fast-forward" aria-hidden="true"></span>
                     </button>
                     <button id="upload-button" class="btn btn-info btn-large">
@@ -97,7 +108,7 @@ wavesurfer.on('ready', function () {
                 </div>
             </div>
 
-            <div class="col-md-8">
+            <div class="col-md-4">
                 <div class="panel panel-default">
                     <div class="panel-heading">Who's here?</div>
                     <div class="panel-body">
@@ -106,11 +117,33 @@ wavesurfer.on('ready', function () {
                     </div>
                 </div>
             </div>
+
+            <div class="col-md-4">
+                <div class="panel panel-default">
+                    <div class="panel-heading">Who's talking?</div>
+                    <div class="panel-body chat-panel">
+                        <ul class="chat-box list-unstyled">
+                        </ul>
+
+                        <div style="padding:0" class="container-fluid">
+                            <div class="row">
+                                <div class="col-md-10">
+                                    <label class="sr-only" for="chat-message-input">Message</label>
+                                    <input type="text" class="input-sm form-control" id="chat-message-input" placeholder="Message">
+                                </div>
+                                <div class="col-md-2">
+                                    <button id="chat-send-button" type="submit" class="btn btn-primary btn-sm btn-block">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="row">
             <div class="col-md-4">
-                <div class="panel panel-default">
+                <div class="panel panel-primary">
                     <div class="panel-heading">
                         Artist Info
                         <span id="artist-info-name" class="pull-right" style="font-weight:bold">

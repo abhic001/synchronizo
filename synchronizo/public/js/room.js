@@ -34,6 +34,26 @@ socket.on('changeSong', function(id) {
     onSongChange(id);
 });
 
+socket.on('songSeeked', function(progress) {
+    console.log("[socket.io] seeking to " + progress);
+    wavesurfer.seekDisabled = true;
+    wavesurfer.seekTo(progress);
+});
+
+socket.on('currentSongPing', function(data) {
+    // check if we are within ~10 seconds of the duration on the server side,
+    // if not, seek to the duration
+    var serverDuration = data.duration;
+    var ourDuration = wavesurfer.getCurrentTime();
+
+    if (Math.abs(serverDuration - ourDuration) > 10) {
+        console.log("[socket.io] out of sync with server side");
+        console.log("[socket.io] seeking to " + data.floatDuration);
+        wavesurfer.seekDisabled = true;
+        wavesurfer.seekTo(data.floatDuration);
+    }
+});
+
 var RETRIEVING_ALREADY = false;
 function retrieveArtistInfo(artist) {
     if (RETRIEVING_ALREADY) {
@@ -133,6 +153,14 @@ function onSongUpdate(song) {
     }
 }
 
+socket.on('playSong', function() {
+    wavesurfer.play();
+});
+
+socket.on('pauseSong', function() {
+    wavesurfer.pause();
+});
+
 socket.on('songUploadProgress', function(data) {
     if (!(data.id in songs)) {
         return;
@@ -214,7 +242,67 @@ if (!(window.File && window.FileReader && window.FileList && window.Blob)) {
   alert('The File APIs are not fully supported in this browser.');
 }
 
+function onSendMessage() {
+    var input_box = $("#chat-message-input");
+
+    var message = String(input_box.val());
+    if (message === "") {
+        return;
+    }
+
+    // empty out the box
+    input_box.val("");
+
+    socket.emit('sendMessage', message);
+}
+
+socket.on('onMessage', function(data) {
+    console.log('onMessage', data);
+
+    if (data.type == "chat") {
+        var user = data.user;
+        var message = data.message;
+
+        var renderedMessage = $('<li><b></b> <div class="arrow_box"></div></li>');
+        renderedMessage.find('b').text(user);
+        renderedMessage.find('.arrow_box').text(message);
+    } else if (data.type == "event") {
+        var message = data.message;
+
+        var renderedMessage = $("<li></li>");
+        renderedMessage.html(message);
+        for (var i = 0; i < data.subjects.length; i++) {
+            var subject = data.subjects[i];
+
+            renderedMessage.find('b').eq(i).text(subject);
+        }
+    }
+
+    if (!renderedMessage) {
+        return;
+    }
+
+    var chat_box = $(".chat-box");
+    chat_box.append(renderedMessage);
+
+    if (data.noAnimate) {
+        return;
+    }
+
+    chat_box.animate({ scrollTop: chat_box[0].scrollHeight }, 'fast');
+});
+
 $( document ).ready(function() {
+    $("#chat-send-button").click(function() {
+        onSendMessage();
+    });
+    $('#chat-message-input').keypress(function (e) {
+        if (e.which == 13) {
+            onSendMessage();
+            return false;    //<---- Add this line
+        }
+    });
+
     $("#upload-button").click(function() {
         $('<input type="file" accept="audio/*">').on('change', function () {
             var file = this.files[0];

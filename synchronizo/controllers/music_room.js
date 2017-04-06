@@ -114,6 +114,16 @@ function onUserRoomJoin(room, user) {
     for (var i = 0; i < room.users.length; i++) {
         user.socket.emit('newUserJoin', room.users[i].summarize());
     }
+    // propogate last 100 messages
+    for (var i = 0; i < room.messages.length; i++) {
+        var message = room.messages[i];
+        // avoid animating every message except the last
+        // to prevent animating a lot for existing messages
+        if (i != room.messages.length - 1) {
+            message.noAnimate = true;
+        }
+        user.socket.emit('onMessage', room.messages[i]);
+    }
     // propogate currently added songs
     for (var i = 0; i < room.songs.length; i++) {
         user.socket.emit('songUpdate', room.songs[i].summarize());
@@ -168,12 +178,56 @@ io.on('connection', function(socket) {
         onUserRoomJoin(room, user);
     });
 
+    socket.on('sendMessage', function(message) {
+        if (!joinedRoom) {
+            return;
+        }
+
+        joinedRoom.messageSent(user, message);
+    });
+
+    socket.on('playSong', function() {
+        if (!joinedRoom) {
+            return;
+        }
+        joinedRoom.playSong(user);
+    });
+
+    socket.on('pauseSong', function() {
+        if (!joinedRoom) {
+            return;
+        }
+        joinedRoom.pauseSong(user);
+    });
+
+    socket.on('nextSong', function() {
+        if (!joinedRoom) {
+            return;
+        }
+        joinedRoom.nextSong(user);
+    });
+
+    socket.on('previousSong', function() {
+        if (!joinedRoom) {
+            return;
+        }
+        joinedRoom.previousSong(user);
+    });
+
     socket.on('clientChangeSong', function(id) {
         if (!joinedRoom) {
             return;
         }
 
         joinedRoom.changeSong(id);
+    });
+
+    socket.on('seekSong', function(data) {
+        if (!joinedRoom) {
+            return;
+        }
+
+        joinedRoom.seekSong(user, data.progress);
     });
 
     socket.on('uploadProgress', function(data) {
@@ -208,7 +262,7 @@ io.on('connection', function(socket) {
 
             song.updateFromLastFM(function() {
                 console.log(user.name + " uploading ", song.summarize());
-                joinedRoom.addSong(song);
+                joinedRoom.addSong(user, song);
 
                 socket.emit('uploadApproved');
                 emitSongUpdate(joinedRoom, song);
